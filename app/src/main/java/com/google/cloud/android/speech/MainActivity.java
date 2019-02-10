@@ -1,25 +1,34 @@
 package com.google.cloud.android.speech;
 
 import android.Manifest;
+import android.content.ComponentName;
+import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
-import android.media.AudioFormat;
-import android.media.AudioRecord;
-import android.support.v7.app.AppCompatActivity;
+import android.content.res.Resources;
 import android.os.Bundle;
-import android.view.View;
+import android.os.IBinder;
 import android.support.annotation.NonNull;
-import android.widget.Toast;
-import android.widget.Button;
-import android.widget.TextView;
-import android.media.MediaRecorder;
-import android.media.MediaPlayer;
-import java.io.IOException;
 import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.res.ResourcesCompat;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.support.v7.widget.Toolbar;
+import android.text.TextUtils;
+import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.TextView;
+
+import java.util.ArrayList;
 
 // B/c I'm new to Java, most of the code on here is taken from:
 // https://medium.com/@ssaurel/create-an-audio-recorder-for-android-94dc7874f3d
 // the only changes are when I was doing app specific things and permission checking
-public class MainActivity extends AppCompatActivity implements ActivityCompat.OnRequestPermissionsResultCallback {
+public class MainActivity extends AppCompatActivity implements MessageDialogFragment.Listener {
 
 
 
