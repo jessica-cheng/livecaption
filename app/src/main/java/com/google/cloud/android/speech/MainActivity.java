@@ -1,164 +1,331 @@
+/*
+ * Copyright 2016 Google Inc. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.google.cloud.android.speech;
 
 import android.Manifest;
+import android.content.ComponentName;
+import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
-import android.media.AudioFormat;
-import android.media.AudioRecord;
-import android.support.v7.app.AppCompatActivity;
+import android.content.res.Resources;
 import android.os.Bundle;
-import android.view.View;
+import android.os.IBinder;
 import android.support.annotation.NonNull;
-import android.widget.Toast;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.res.ResourcesCompat;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.support.v7.widget.Toolbar;
+import android.text.TextUtils;
+import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.TextView;
-import android.media.MediaRecorder;
-import android.media.MediaPlayer;
-import java.io.IOException;
-import android.support.v4.app.ActivityCompat;
 
-// B/c I'm new to Java, most of the code on here is taken from:
-// https://medium.com/@ssaurel/create-an-audio-recorder-for-android-94dc7874f3d
-// the only changes are when I was doing app specific things and permission checking
-public class MainActivity extends AppCompatActivity implements ActivityCompat.OnRequestPermissionsResultCallback {
+import java.util.ArrayList;
 
 
+public class MainActivity extends AppCompatActivity implements MessageDialogFragment.Listener {
 
-    private Button play, stop, record;
-    private MediaRecorder myAudioRecorder;
-    private TextView to_print;
-    private String output_file;
-    private SpeechService caption;
+    private static final String FRAGMENT_MESSAGE_DIALOG = "message_dialog";
+
+    private static final String STATE_RESULTS = "results";
+    public Boolean stopped = true;
+    private static final int REQUEST_RECORD_AUDIO_PERMISSION = 1;
+    public String theCaption = "";
+    private SpeechService mSpeechService;
+    private Button play, record = null;
+    private VoiceRecorder mVoiceRecorder;
+    private final VoiceRecorder.Callback mVoiceCallback = new VoiceRecorder.Callback() {
+
+        @Override
+        public void onVoiceStart() {
+            showStatus(true);
+            if (mSpeechService != null) {
+                mSpeechService.startRecognizing(mVoiceRecorder.getSampleRate());
+            }
+        }
+
+        @Override
+        public void onVoice(byte[] data, int size) {
+            if (mSpeechService != null) {
+                mSpeechService.recognize(data, size);
+            }
+        }
+
+        @Override
+        public void onVoiceEnd() {
+            showStatus(false);
+            if (mSpeechService != null) {
+                mSpeechService.finishRecognizing();
+            }
+        }
+
+    };
+
+    // Resource caches
+    private int mColorHearing;
+    private int mColorNotHearing;
+
+    // View references
+    private TextView mStatus;
+    private TextView mText;
+    private ResultAdapter mAdapter;
+    private RecyclerView mRecyclerView;
+
+    private final ServiceConnection mServiceConnection = new ServiceConnection() {
+
+        @Override
+        public void onServiceConnected(ComponentName componentName, IBinder binder) {
+            mSpeechService = SpeechService.from(binder);
+            mSpeechService.addListener(mSpeechServiceListener);
+            mStatus.setVisibility(View.VISIBLE);
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName componentName) {
+            mSpeechService = null;
+        }
+
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Grab the actual button objects from the xml and link them to these variables?
-        play = (Button) findViewById(R.id.play);
-        stop = (Button) findViewById(R.id.stop);
-        record = (Button) findViewById(R.id.record);
+        final Resources resources = getResources();
+        final Resources.Theme theme = getTheme();
+        mColorHearing = ResourcesCompat.getColor(resources, R.color.status_hearing, theme);
+        mColorNotHearing = ResourcesCompat.getColor(resources, R.color.status_not_hearing, theme);
 
-        // For using this function to hold the resulting audio: https://stackoverflow.com/a/13767611
-        output_file = getCacheDir() + "/recording.3gp";
+        setSupportActionBar((Toolbar) findViewById(R.id.toolbar));
+        mStatus = (TextView) findViewById(R.id.status);
+        mText = (TextView) findViewById(R.id.text);
 
-        // disable the stop and play buttons cause there's nothing to stop nor play
-        play.setEnabled(false);
-        stop.setEnabled(false);
+        mRecyclerView = (RecyclerView) findViewById(R.id.recycler_view);
+        mRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+        final ArrayList<String> results = savedInstanceState == null ? null :
+                savedInstanceState.getStringArrayList(STATE_RESULTS);
+        mAdapter = new ResultAdapter(results);
+        mRecyclerView.setAdapter(mAdapter);
+    }
 
+    @Override
+    protected void onStart() {
+        super.onStart();
 
+        // Prepare Cloud Speech API
+        bindService(new Intent(this, SpeechService.class), mServiceConnection, BIND_AUTO_CREATE);
+
+        // Start listening to voices
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                == PackageManager.PERMISSION_GRANTED) {
+            recordButtonInit();
+        } else if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                Manifest.permission.RECORD_AUDIO)) {
+            showPermissionMessageDialog();
+        } else {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO},
+                    REQUEST_RECORD_AUDIO_PERMISSION);
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        // Stop listening to voice
+        stopVoiceRecorder();
+
+        // Stop Cloud Speech API
+        mSpeechService.removeListener(mSpeechServiceListener);
+        unbindService(mServiceConnection);
+        mSpeechService = null;
+        super.onStop();
 
     }
 
-    // Help with doing permission request for microphone: https://stackoverflow.com/a/39846797
-    // and this: https://github.com/googlesamples/android-RuntimePermissionsBasic/blob/master/Application/src/main/java/com/example/android/basicpermissions/MainActivity.java
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        if (mAdapter != null) {
+            outState.putStringArrayList(STATE_RESULTS, mAdapter.getResults());
+        }
+    }
+
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
-                                           @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == 10) {
-            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                actually_record_audio();
-            }else{
-
+            @NonNull int[] grantResults) {
+        if (requestCode == REQUEST_RECORD_AUDIO_PERMISSION) {
+            if (permissions.length == 1 && grantResults.length == 1
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                recordButtonInit();
+            } else {
+                showPermissionMessageDialog();
             }
-        }
-    }
-
-    // Help with doing permission request for microphone: https://stackoverflow.com/a/39846797
-    public void start_record(View v) {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-                != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[] { Manifest.permission.RECORD_AUDIO },
-                    10);
         } else {
-            actually_record_audio();
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
     }
 
-    // On a good method to deal with button presses by using other functions:
-    // https://medium.com/@jorgecool/i-just-have-to-say-that-doing-any-of-the-first-3-options-is-not-the-ideal-way-because-you-are-also-e5e039d14038
-    private void actually_record_audio() {
-        byte[] buff = null;
-
-        try {
-            final int sz = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
-            final AudioRecord audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC,
-                    16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, sz);
-            if (audioRecord.getState() == AudioRecord.STATE_INITIALIZED) {
-                buff = new byte[sz];
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.main, menu);
+        return true;
+    }
+    public void recordButtonInit() {
+        final Button record = (Button) findViewById(R.id.record);
+        record.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View view) {
+                if (stopped == true) {
+                    stopped = false;
+                    record.setText("Stop Recording");
+                    startVoiceRecorder();
+                } else {
+                    stopped = true;
+                    record.setText("Start Recording");
+                    stopVoiceRecorder();
+                }
             }
-            if (audioRecord == null) {
-                throw new RuntimeException("Cannot instantiate VoiceRecorder");
-            }
-            // Start recording.
-            audioRecord.startRecording();
-            final int size = audioRecord.read(buff, 0, buff.length);
-
-            if (caption != null) {
-                caption.startRecognizing(16000);
-            }
-            while (caption != null) {
-
-                caption.recognize(buff, size);
-
-            }
-            /*            // Initialize Media things
-            myAudioRecorder = new MediaRecorder();
-
-            myAudioRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-            System.out.print("Successfully connected MIC");
-            myAudioRecorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
-            System.out.print("Successfully set output format");
-            myAudioRecorder.setAudioEncoder(MediaRecorder.OutputFormat.AMR_NB);
-            System.out.print("Successfully set encoder");
-            myAudioRecorder.setOutputFile(output_file);
-            System.out.print("Successfully set output file");
-            myAudioRecorder.prepare();
-            System.out.print("Successfully prepared");
-            myAudioRecorder.start();
-            System.out.print("Successfully started");
-
-            record.setEnabled(false);
-            stop.setEnabled(true);
-            Toast.makeText(getApplicationContext(), "Recording started", Toast.LENGTH_LONG).show();*/
-        } catch (IllegalStateException i_s_except) {
-            to_print.setText("Cannot Record: Illegal State Exception - " + i_s_except.toString());
-        }
-   /*      catch (IOException io_except) {
-            to_print.setText("Cannot Record: I/O Exception - " + io_except.toString());
-        }
-    */
+        });
     }
 
-    public void stop_record(View v) {
-        if (caption != null) {
-            caption.finishRecognizing();
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()) {
+            case R.id.action_file:
+                mSpeechService.recognizeInputStream(getResources().openRawResource(R.raw.audio));
+                return true;
+            default:
+                return super.onOptionsItemSelected(item);
         }
-        myAudioRecorder.stop();
-        myAudioRecorder.release();
-        myAudioRecorder = null; // but wouldn't we just want to reset it?
-
-        // now change the buttons
-        record.setEnabled(true);
-        stop.setEnabled(false);
-        play.setEnabled(true);
-
-        Toast.makeText(getApplicationContext(), "Audio Recorded Successfully", Toast.LENGTH_LONG).show();
-        //to_print.setText("Stopped Recording");
     }
 
-    public void play_record(View v) {
-        MediaPlayer tempMediaPlayer = new MediaPlayer();
+    private void startVoiceRecorder() {
+        if (mVoiceRecorder != null) {
+            mVoiceRecorder.stop();
+        }
+        mVoiceRecorder = new VoiceRecorder(mVoiceCallback);
+        mVoiceRecorder.start();
+    }
 
-        try {
-            tempMediaPlayer.setDataSource(output_file);
-            tempMediaPlayer.prepare();
-            tempMediaPlayer.start();
-        } catch (Exception except) {
-            to_print.setText("Cannot Play: Exception");
+    private void stopVoiceRecorder() {
+        if (mVoiceRecorder != null) {
+            mVoiceRecorder.stop();
+            theCaption = "";
+            mVoiceRecorder = null;
+        }
+    }
+
+    private void showPermissionMessageDialog() {
+        MessageDialogFragment
+                .newInstance(getString(R.string.permission_message))
+                .show(getSupportFragmentManager(), FRAGMENT_MESSAGE_DIALOG);
+    }
+
+    private void showStatus(final boolean hearingVoice) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                mStatus.setTextColor(hearingVoice ? mColorHearing : mColorNotHearing);
+            }
+        });
+    }
+
+    @Override
+    public void onMessageDialogDismissed() {
+        ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO},
+                REQUEST_RECORD_AUDIO_PERMISSION);
+    }
+
+    private final SpeechService.Listener mSpeechServiceListener =
+            new SpeechService.Listener() {
+                @Override
+                public void onSpeechRecognized(final String text, final boolean isFinal) {
+                    if (isFinal) {
+                        mVoiceRecorder.dismiss();
+                    }
+                    if (mText != null && !TextUtils.isEmpty(text)) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                String cap = theCaption + ' ' + text;
+                                mText.setText(cap);
+
+                                if (isFinal) {
+                                    theCaption = cap;
+                                    //mAdapter.addResult(text);
+                                    //mRecyclerView.smoothScrollToPosition(0);
+
+                                }
+                            }
+                        });
+                    }
+                }
+            };
+
+    private static class ViewHolder extends RecyclerView.ViewHolder {
+
+        TextView text;
+
+        ViewHolder(LayoutInflater inflater, ViewGroup parent) {
+            super(inflater.inflate(R.layout.item_result, parent, false));
+            text = (TextView) itemView.findViewById(R.id.text);
         }
 
+    }
+
+    private static class ResultAdapter extends RecyclerView.Adapter<ViewHolder> {
+
+        private final ArrayList<String> mResults = new ArrayList<>();
+
+        ResultAdapter(ArrayList<String> results) {
+            if (results != null) {
+                mResults.addAll(results);
+            }
+        }
+
+        @Override
+        public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+            return new ViewHolder(LayoutInflater.from(parent.getContext()), parent);
+        }
+
+        @Override
+        public void onBindViewHolder(ViewHolder holder, int position) {
+            holder.text.setText(mResults.get(position));
+        }
+
+        @Override
+        public int getItemCount() {
+            return mResults.size();
+        }
+
+        void addResult(String result) {
+            mResults.add(0, result);
+            notifyItemInserted(0);
+        }
+
+        public ArrayList<String> getResults() {
+            return mResults;
+        }
 
     }
+
 }

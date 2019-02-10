@@ -117,10 +117,10 @@ public class VoiceRecorder {
             }
             if (mAudioRecord != null) {
                 mAudioRecord.stop();
-                mAudioRecord.release();
-                mAudioRecord = null;
+                //mAudioRecord.release();
+                //mAudioRecord = null;
             }
-            mBuffer = null;
+            //mBuffer = null;
         }
     }
 
