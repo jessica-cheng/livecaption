@@ -39,6 +39,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.TextView;
+import android.support.design.widget.TextInputEditText;
 
 import java.util.ArrayList;
 
@@ -91,6 +92,8 @@ public class MainActivity extends AppCompatActivity implements MessageDialogFrag
     private ResultAdapter mAdapter;
     private RecyclerView mRecyclerView;
 
+    private TextInputEditText mTextInput;
+
     private final ServiceConnection mServiceConnection = new ServiceConnection() {
 
         @Override
@@ -127,6 +130,8 @@ public class MainActivity extends AppCompatActivity implements MessageDialogFrag
                 savedInstanceState.getStringArrayList(STATE_RESULTS);
         mAdapter = new ResultAdapter(results);
         mRecyclerView.setAdapter(mAdapter);
+
+
     }
 
     @Override
@@ -147,7 +152,13 @@ public class MainActivity extends AppCompatActivity implements MessageDialogFrag
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO},
                     REQUEST_RECORD_AUDIO_PERMISSION);
         }
+
+
+        mTextInput = (TextInputEditText) findViewById(R.id.input_text_var);
+
     }
+
+
 
     @Override
     protected void onStop() {
