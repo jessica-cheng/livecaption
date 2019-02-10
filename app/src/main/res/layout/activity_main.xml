@@ -22,22 +22,62 @@
     android:layout_height="match_parent"
     tools:context="com.google.cloud.android.speech.MainActivity">
 
+    <Button
+        android:id="@+id/play"
+        android:layout_width="110dp"
+        android:layout_height="110dp"
+        android:layout_gravity="bottom|right"
+        android:layout_marginRight="@dimen/spacing_small"
+        android:layout_marginBottom="@dimen/spacing_small"
+        android:elevation="0dp"
+        android:text="@string/play"
+        android:visibility="visible"
+        app:layout_anchorGravity="center_vertical|center_horizontal" />
+
+    <Button
+        android:id="@+id/stop"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clickable="true"
+        android:text="@string/stop"
+        android:visibility="visible"
+        app:layout_anchorGravity="center_horizontal" />
+
+    <Button
+        android:id="@+id/record"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clickable="true"
+        android:text="@string/record"
+        android:visibility="visible"
+        app:layout_anchorGravity="center_horizontal" />
+
+    <android.support.design.widget.TextInputLayout
+        android:layout_width="match_parent"
+        android:layout_height="323dp"
+        android:layout_gravity="bottom"
+        app:layout_anchorGravity="bottom|clip_horizontal">
+
+        <android.support.design.widget.TextInputEditText
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="bottom"
+            android:hint="hint" />
+    </android.support.design.widget.TextInputLayout>
+
     <android.support.design.widget.AppBarLayout
         android:id="@+id/app_bar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="400dp"
         android:background="?attr/colorPrimary"
         android:theme="@style/ThemeOverlay.AppCompat.Dark">
 
-        <android.support.v7.widget.Toolbar
-            android:id="@+id/toolbar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="?attr/colorPrimary"
-            android:paddingLeft="32dp"
-            android:paddingRight="32dp"/>
-
-        <include layout="@layout/item_result"/>
+        <include
+            layout="@layout/item_result"
+            android:layout_width="369dp"
+            android:layout_height="323dp"
+            android:layout_gravity="center_horizontal|center_vertical"
+            android:layout_marginTop="55dp" />
 
     </android.support.design.widget.AppBarLayout>
 
@@ -46,27 +86,17 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
-        android:paddingBottom="@dimen/spacing_small"
         android:paddingTop="@dimen/spacing_small"
+        android:paddingBottom="@dimen/spacing_small"
         app:behavior_overlapTop="128dp"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior"/>
+        app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
-    <Button
-        android:id="@+id/play"
-        android:layout_width="wrap_content"
+    <android.support.v7.widget.Toolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/play" />
-
-    <Button
-        android:id="@+id/stop"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/stop" />
-
-    <Button
-        android:id="@+id/record"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/record" />
+        android:background="?attr/colorPrimary"
+        android:minHeight="?attr/actionBarSize"
+        android:theme="?attr/actionBarTheme" />
 
 </android.support.design.widget.CoordinatorLayout>
