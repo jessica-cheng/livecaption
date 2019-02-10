@@ -17,4 +17,4 @@ Below, click the text box to input a message you want to "say".
 ## Made Using
 * Google Cloud Speech
 * Android Studios
-* tutorial from https://medium.com/@ssaurel/create-an-audio-recorder-for-android-94dc7874f3d
+* tutorial from https://medium.com/@ssaurel/create-an-audio-recorder-for-android-94dc7874f3d15b2358a3acd48cfb90d6355f08052d2414cb034
